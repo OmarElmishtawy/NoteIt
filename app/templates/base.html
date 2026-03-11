@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NoteIt{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <header class="site-header {% block header_class %}{% endblock %}">
+        <a href="{{ url_for('main.home') }}">
+            <img src="{{ url_for('static', filename='NoteIt_logo.png') }}" alt="NoteIt Logo" class="logo">
+        </a>
+        {% block header_actions %}{% endblock %}
+    </header>
+    <main class="site-main">    
+        <div class="container">
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, msg in messages %}
+                  <div class="alert alert-{{ category }}" id="alert">{{ msg }}</div>
+                {% endfor %}
+
+              {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            setTimeout(() => {
+                const alert = document.getElementById("alert");
+                if (alert) {
+                    alert.classList.add("hide");
+                }
+            }, 3000);
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+
+</body>
+</html>

@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - NoteIt{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+{% block header_class %}has-actions{% endblock %}
+
+{% block header_actions %}
+  <div class="header-center">
+    <form class="search-form search-form-header" action="{{ url_for('main.search_notes') }}" method="GET">
+      <div class="search-input-wrap">
+        <input name="q" type="search" placeholder="Search your notes..." aria-label="search notes">
+        <button type="submit" class="search-btn" aria-label="Search">
+          <img src="{{ url_for('static', filename='search.svg') }}" alt="" class="search-icon">
+        </button>
+      </div>
+    </form>
+  </div>
+  <div class="header-right">
+    <form class="logout-btn-form" action="{{ url_for('auth.logout') }}" method="POST">
+      <button type="submit" class="btn-secondary btn">Logout</button>
+    </form>
+  </div>
+{% endblock %}
+
+{% block content %}
+<div class="app-grid">
+  <aside class="sidebar card" aria-label="Folders">
+    <h3 class="sidebar-title">Folders</h3>
+    <div class="folders" id="foldersList">
+      {% for f in folders %}
+      <div class="folder {% if loop.first %}active{% endif %}" data-id="{{ f.id }}">
+        <div class="folder-left">
+          <div class="name folder-name" data-id="{{ f.id }}">{{ f.name }}</div>
+          <div class="meta">{{ 'Default' if loop.first else 'Custom' }}</div>
+        </div>
+        <div class="folder-actions">
+          <div class="count muted-text">{{ f.notes|length }}</div>
+          <button class="delete-folder" title="Delete folder" aria-label="Delete folder">✕</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-secondary add-folder" id="addFolderBtn">+ Add folder</button>
+  </aside>
+
+  <section class="main-area">
+    <div class="topbar">
+      <div class="topbar-title">All notes</div>
+    </div>
+
+    <div class="notes-wrap card">
+      <div class="notes-content" id="notesContent">
+        <div class="empty-hint" id="emptyHint">
+          "It's empty here, do some planning"
+        </div>
+      </div>
+      <button class="floating-add" title="Add note" id="floatingAdd">+</button>
+    </div>
+  </section>
+</div>
+
+<div id="folderModal" class="modal" aria-hidden="true">
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <h4>New folder</h4>
+    <input id="folderModalInput" type="text" placeholder="Folder name">
+    <div class="modal-actions">
+      <button class="btn btn-secondary cancel" style="margin-right:.5rem;">Cancel</button>
+      <button class="btn btn-secondary ok">Create</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+ (function () {
+  const list = document.getElementById('foldersList');
+  const addBtn = document.getElementById('addFolderBtn');
+  const notesWrap = document.querySelector('.notes-wrap');
+  const notesContent = document.getElementById('notesContent');
+  const emptyHint = document.getElementById('emptyHint');
+  const addNoteBtn = document.getElementById('floatingAdd');
+
+  function escapeHtml(str) {
+    return String(str ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function getActiveFolderEl() {
+    return document.querySelector('.folders .folder.active');
+  }
+
+  function setFolderCount(folderId, newCount) {
+    const folderEl = document.querySelector(`.folders .folder[data-id="${folderId}"]`);
+    if (!folderEl) return;
+    const countEl = folderEl.querySelector('.count');
+    if (countEl) countEl.textContent = String(newCount);
+  }
+
+  function adjustActiveFolderCount(delta) {
+    const folderEl = getActiveFolderEl();
+    if (!folderEl) return;
+    const id = folderEl.getAttribute('data-id');
+    const countEl = folderEl.querySelector('.count');
+    if (!countEl) return;
+    const current = parseInt(countEl.textContent || '0', 10) || 0;
+    setFolderCount(id, Math.max(0, current + delta));
+  }
+
+  addNoteBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const activeFolder = getActiveFolderEl();
+    if (!activeFolder) return;
+    const folderId = activeFolder.getAttribute('data-id');
+
+    const title = 'New Note';
+    const content = 'Description';
+
+    try {
+      const res = await fetch('/notes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_id: folderId, title, content })
+      });
+      if (!res.ok) throw new Error('Failed to create note');
+      adjustActiveFolderCount(1);
+      await loadNotes(folderId);
+    } catch (err) {
+      console.error(err);
+      alert('Could not create note.');
+    }
+  });
+
+  function createFolderElement(id, name, count, isDefault) {
+    const el = document.createElement('div');
+    el.className = 'folder';
+    el.setAttribute('data-id', id);
+    el.innerHTML = `
+      <div class="folder-left">
+        <div class="name folder-name" data-id="${id}">${name}</div>
+        <div class="meta">${isDefault ? 'Default' : 'Custom'}</div>
+      </div>
+      <div class="folder-actions">
+        <div class="count muted-text">${count}</div>
+        <button class="delete-folder" title="Delete folder" aria-label="Delete folder">✕</button>
+      </div>
+    `;
+    return el;
+  }
+
+  function clearActive() {
+    document.querySelectorAll('.folders .folder').forEach(f => f.classList.remove('active'));
+  }
+
+  async function loadNotes(folderId) {
+    try {
+      const res = await fetch(`/folders/${folderId}/notes`);
+      if (!res.ok) throw new Error('Failed to load notes');
+      const json = await res.json();
+      renderNotes(json.notes || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function renderNotes(notes) {
+    notesContent.innerHTML = '';
+    if (!notes.length) {
+      notesContent.appendChild(emptyHint);
+      return;
+    }
+    const grid = document.createElement('div');
+    grid.className = 'notes-grid';
+    notes.forEach(n => {
+      const card = document.createElement('div');
+      card.className = 'note-card';
+      card.setAttribute('data-note-id', n.id);
+      card.innerHTML = `
+        <button class="delete-note" title="Delete note" aria-label="Delete note">✕</button>
+        <h4 class="note-card-title">${escapeHtml(n.title)}</h4>
+        <div class="note-dashes">-----</div>
+        <p class="muted-text note-card-body">${escapeHtml((n.content || '').slice(0, 220))}</p>
+      `;
+      grid.appendChild(card);
+    });
+    notesContent.appendChild(grid);
+  }
+
+  // handle note delete (event delegation)
+  notesWrap.addEventListener('click', async (e) => {
+    const del = e.target.closest('.delete-note');
+    if (!del) return;
+    e.stopPropagation();
+    const card = del.closest('.note-card');
+    const noteId = card?.getAttribute('data-note-id');
+    if (!noteId) return;
+    if (!confirm('Delete this note?')) return;
+
+    try {
+      const res = await fetch(`/notes/${noteId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('delete failed');
+      const json = await res.json();
+      card.remove();
+      if (json && typeof json.notes_count === 'number' && json.folder_id) {
+        setFolderCount(json.folder_id, json.notes_count);
+      } else {
+        adjustActiveFolderCount(-1);
+      }
+
+      // if grid becomes empty, show empty hint
+      const remainingCards = notesContent.querySelectorAll('.note-card').length;
+      if (!remainingCards) {
+        notesContent.innerHTML = '';
+        notesContent.appendChild(emptyHint);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Could not delete note.');
+    }
+  });
+
+  // handle folder clicks and delete via event delegation
+  list.addEventListener('click', async (e) => {
+    const del = e.target.closest('.delete-folder');
+    if (del) {
+      e.stopPropagation();
+      const folderEl = del.closest('.folder');
+      if (!folderEl) return;
+      if (!confirm('Delete this folder? This will remove all notes inside.')) return;
+      const id = folderEl.getAttribute('data-id');
+      try {
+        const res = await fetch(`/folders/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('delete failed');
+        folderEl.remove();
+        if (folderEl.classList.contains('active')) {
+          notesContent.innerHTML = '';
+          notesContent.appendChild(emptyHint);
+        }
+      } catch (err) {
+        alert('Could not delete folder.');
+      }
+      return;
+    }
+
+    const folderEl = e.target.closest('.folder');
+    if (folderEl) {
+      clearActive();
+      folderEl.classList.add('active');
+      const id = folderEl.getAttribute('data-id');
+      loadNotes(id);
+    }
+  });
+
+  function attachFolderHandlers(folderEl) {
+    if (folderEl._handled) return;
+    folderEl._handled = true;
+    const nameEl = folderEl.querySelector('.folder-name');
+
+    nameEl.addEventListener('dblclick', (ev) => {
+      ev.stopPropagation();
+      const old = nameEl.textContent.trim();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = old;
+      input.className = 'folder-rename-input';
+      nameEl.replaceWith(input);
+      input.focus();
+
+      async function finish(save) {
+        const restore = document.createElement('div');
+        restore.className = 'name folder-name';
+        restore.setAttribute('data-id', folderEl.getAttribute('data-id'));
+        restore.textContent = old;
+        if (save) {
+          const newName = (input.value || '').trim() || old;
+          try {
+            const res = await fetch(`/folders/${folderEl.getAttribute('data-id')}/rename`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: newName })
+            });
+            if (!res.ok) throw new Error('rename failed');
+            const json = await res.json();
+            restore.textContent = json.name;
+          } catch (err) {
+            restore.textContent = old;
+            alert('Could not rename folder.');
+          }
+        }
+        input.replaceWith(restore);
+        // attach dblclick handler to the newly restored name element
+        attachFolderHandlers(folderEl);
+      }
+
+      input.addEventListener('blur', () => finish(true));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') finish(true);
+        else if (e.key === 'Escape') finish(false);
+      });
+    });
+  }
+
+  document.querySelectorAll('.folders .folder').forEach(f => attachFolderHandlers(f));
+
+  addBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const name = await showFolderModal() || '';
+    if (!name) return;
+    try {
+      const res = await fetch('/folders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      if (!res.ok) throw new Error('Failed to create');
+      const json = await res.json();
+      const el = createFolderElement(json.id, json.name, 0, false);
+      list.appendChild(el);
+      attachFolderHandlers(el);
+    } catch (err) {
+      console.error(err);
+      alert('Could not create folder.');
+    }
+});
+
+function showFolderModal(defaultVal = '') {
+  return new Promise(resolve => {
+    let modal = document.getElementById('folderModal');
+    if (!modal) return resolve(null);
+    const input = modal.querySelector('#folderModalInput');
+    const ok = modal.querySelector('.ok');
+    const cancel = modal.querySelector('.cancel');
+
+    function open() {
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+      input.value = defaultVal;
+      input.focus();
+    }
+    function close() {
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function cleanup() {
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      input.removeEventListener('keydown', onKey);
+    }
+    function onOk() {
+      const val = (input.value || '').trim();
+      cleanup(); close(); resolve(val || null);
+    }
+    function onCancel() {
+      cleanup(); close(); resolve(null);
+    }
+    function onKey(e) {
+      if (e.key === 'Enter') onOk();
+      if (e.key === 'Escape') onCancel();
+    }
+
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    input.addEventListener('keydown', onKey);
+    open();
+  });
+}
+
+  const initialActive = document.querySelector('.folders .folder.active');
+  if (initialActive) initialActive.click();
+})();
+</script>
+{% endblock %}
+

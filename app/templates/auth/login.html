@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Log in - NoteIt{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="card auth-card-sm">
+  <div class="center">
+    <h2>Welcome back</h2>
+    <p class="muted-text">Sign in to continue to your notes.</p>
+  </div>
+  <form class="auth-form" method="POST" action="{{ url_for('auth.login') }}">
+    <div class="form-group">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" placeholder="your username or email" required>
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" placeholder="••••••••" required>
+    </div>
+    <div class="auth-row">
+      <div class="muted-text">Not registered?</div>
+      <button class="btn btn-primary" type="submit">Log in</button>
+    </div>
+  </form>
+  <div class="auth-footer">
+    <a href="{{ url_for('auth.register') }}" class="btn btn-secondary">Create an account</a>
+  </div>
+</div>
+{% endblock %}
+
