@@ -1,9 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timezone
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer
 
 from .extensions import db
 from flask_login import UserMixin, current_user
+
+
+def _utc_now():
+    """Timezone-aware UTC now (replaces deprecated datetime.utcnow)."""
+    return datetime.now(timezone.utc)
 
 
 class User(db.Model, UserMixin):
@@ -14,8 +20,8 @@ class User(db.Model, UserMixin):
     # Flask-Login uses `is_active` to decide if login_user() is allowed.
     # We default to active since we don't have an activation flow yet.
     is_active = db.Column(db.Boolean, nullable=False, default=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=_utc_now)
+    updated_at = db.Column(db.DateTime, nullable=False, default=_utc_now)
 
     folders = db.relationship("Folder", backref="owner", lazy=True, cascade="all, delete-orphan")
     notes = db.relationship("Note", backref="author", lazy=True, cascade="all, delete-orphan")
@@ -28,8 +34,8 @@ class Folder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=_utc_now)
+    updated_at = db.Column(db.DateTime, nullable=False, default=_utc_now)
 
     notes = db.relationship("Note", backref="folder", lazy=True, cascade="all, delete-orphan")
 
@@ -43,8 +49,8 @@ class Note(db.Model):
     content = db.Column(db.Text, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     folder_id = db.Column(db.Integer, db.ForeignKey("folder.id"), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=_utc_now)
+    updated_at = db.Column(db.DateTime, nullable=False, default=_utc_now)
 
     def __repr__(self) -> str:
         return f"Note {self.title}"

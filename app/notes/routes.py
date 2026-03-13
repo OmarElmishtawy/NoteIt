@@ -1,9 +1,23 @@
-from flask import render_template, request, jsonify
+from flask import render_template, request, jsonify, abort
 from . import notes_bp
 from flask_login import login_required, current_user
 
 from ..extensions import db
 from ..models import Folder, Note
+
+
+def _get_folder_or_404(folder_id):
+    folder = db.session.get(Folder, int(folder_id))
+    if folder is None:
+        abort(404)
+    return folder
+
+
+def _get_note_or_404(note_id):
+    note = db.session.get(Note, note_id)
+    if note is None:
+        abort(404)
+    return note
 
 @notes_bp.route('/')
 def notes():
@@ -24,7 +38,7 @@ def create_note():
     if not folder_id:
         return jsonify({'error': 'folder_id required'}), 400
 
-    folder = Folder.query.get_or_404(int(folder_id))
+    folder = _get_folder_or_404(folder_id)
     if folder.user_id != current_user.id:
         return jsonify({'error': 'Forbidden'}), 403
 
@@ -46,7 +60,7 @@ def create_note():
 @login_required
 def note(note_id):
     if request.method == 'DELETE':
-        note_obj = Note.query.get_or_404(note_id)
+        note_obj = _get_note_or_404(note_id)
         if note_obj.user_id != current_user.id:
             return jsonify({'error': 'Forbidden'}), 403
         folder_id = note_obj.folder_id

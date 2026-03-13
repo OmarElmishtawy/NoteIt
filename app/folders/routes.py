@@ -1,8 +1,15 @@
-from flask import render_template, redirect, url_for, flash, request, jsonify
+from flask import render_template, redirect, url_for, flash, request, jsonify, abort
 from . import folders_bp
 from flask_login import login_required, current_user
 from ..models import Folder, Note
 from ..extensions import db
+
+
+def _get_folder_or_404(folder_id):
+    folder = db.session.get(Folder, folder_id)
+    if folder is None:
+        abort(404)
+    return folder
 
 
     # Replace the current folders() with this API endpoint
@@ -48,7 +55,7 @@ def rename_folder(folder_id):
     new_name = (data.get('name') or '').strip()
     if not new_name:
         return jsonify({'error': 'Name required'}), 400
-    folder = Folder.query.get_or_404(folder_id)
+    folder = _get_folder_or_404(folder_id)
     if folder.user_id != current_user.id:
         return jsonify({'error': 'Forbidden'}), 403
     folder.name = new_name
@@ -59,7 +66,7 @@ def rename_folder(folder_id):
 @folders_bp.route('/<int:folder_id>', methods=['DELETE'])
 @login_required
 def delete_folder(folder_id):
-    folder = Folder.query.get_or_404(folder_id)
+    folder = _get_folder_or_404(folder_id)
     if folder.user_id != current_user.id:
         return jsonify({'error': 'Forbidden'}), 403
     db.session.delete(folder)
@@ -70,7 +77,7 @@ def delete_folder(folder_id):
 @folders_bp.route('/<int:folder_id>/notes', methods=['GET'])
 @login_required
 def folder_notes(folder_id):
-    folder = Folder.query.get_or_404(folder_id)
+    folder = _get_folder_or_404(folder_id)
     if folder.user_id != current_user.id:
         return jsonify({'error': 'Forbidden'}), 403
     notes = []
